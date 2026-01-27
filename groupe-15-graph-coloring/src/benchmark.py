@@ -14,7 +14,10 @@ from solve_coloring import solve_min_coloring
 
 Node = Hashable
 
-
+# --------------------------------------------------------------------
+# Structure de données pour stocker une ligne de benchmark
+# Chaque instance testée + méthode correspond à une ligne du CSV final
+# --------------------------------------------------------------------
 @dataclass
 class BenchRow:
     instance: str
@@ -23,44 +26,57 @@ class BenchRow:
     seed: int
     method: str
     colors_used: int
-    valid: bool
+    valid: bool                 # la coloration est-elle valide ?
     time_s: float
     status: str
     k_found: Optional[int]
 
-
+# --------------------------------------------------------------------
+# Vérifie qu’une coloration est valide :
+# deux sommets adjacents ne doivent pas avoir la même couleur
+# --------------------------------------------------------------------
 def is_valid_coloring(G: nx.Graph, coloring: Dict[Node, int]) -> bool:
     for u, v in G.edges():
         if coloring.get(u) == coloring.get(v):
             return False
     return True
 
-
+# --------------------------------------------------------------------
+# Compte le nombre de couleurs distinctes utilisées dans la coloration
+# --------------------------------------------------------------------
 def colors_used(coloring: Dict[Node, int]) -> int:
     return len(set(coloring.values())) if coloring else 0
 
-
+# --------------------------------------------------------------------
+# Crée automatiquement le dossier parent du fichier de sortie (CSV)
+# --------------------------------------------------------------------
 def ensure_parent_dir(path: str) -> None:
     folder = os.path.dirname(path)
     if folder:
         os.makedirs(folder, exist_ok=True)
 
-
+# --------------------------------------------------------------------
+# Lance une campagne complète de benchmarks sur différentes instances
+# et différentes méthodes, puis écrit les résultats dans un CSV
+# --------------------------------------------------------------------
 def run_benchmark(
     out_csv: str = "outputs/benchmark.csv",
     seeds: List[int] = [1, 2, 3],
     methods: List[str] = ["greedy", "dsatur", "cp_min"],
-    # Bench params (modifie si tu veux)
+
+    # Paramètres des graphes testés
     erdos_sizes: List[int] = [30, 50, 80],
     erdos_ps: List[float] = [0.10, 0.20, 0.30],
     grids: List[Tuple[int, int]] = [(8, 8), (12, 12)],
+    
     include_map_like: bool = True,
     timeout_cp_min: float = 2.0,
     kmax: Optional[int] = None,
 ) -> List[BenchRow]:
+    # Liste qui contiendra toutes les lignes du benchmark
     rows: List[BenchRow] = []
 
-    # --- MAP_LIKE (1 instance, pas dépendante de seed) ---
+    # 1) Instance map_like
     if include_map_like:
         inst = load_instance("map_like")
         G = inst.graph
@@ -69,6 +85,7 @@ def run_benchmark(
             status = "OK"
             k_found = None
 
+            # Sélection de la méthode
             if method == "greedy":
                 coloring = greedy_coloring(G)
             elif method == "dsatur":
@@ -89,6 +106,7 @@ def run_benchmark(
             valid = coloring is not None and is_valid_coloring(G, coloring)
             used = colors_used(coloring) if coloring is not None else 0
 
+            # Ajout d’une ligne de benchmark
             rows.append(BenchRow(
                 instance=inst.name,
                 family="map_like",
@@ -102,7 +120,7 @@ def run_benchmark(
                 k_found=k_found,
             ))
 
-    # --- GRID ---
+     # 2) Grilles (grid)
     for (w, h) in grids:
         inst = load_instance("grid", w=w, h=h)
         G = inst.graph
@@ -144,7 +162,7 @@ def run_benchmark(
                 k_found=k_found,
             ))
 
-    # --- ERDOS (dépend des seeds) ---
+    # 3) Graphes d'Erdos
     for n in erdos_sizes:
         for p in erdos_ps:
             for seed in seeds:
@@ -189,14 +207,17 @@ def run_benchmark(
                         k_found=k_found,
                     ))
 
-    # --- Write CSV ---
+    # 4) Écriture du CSV
     ensure_parent_dir(out_csv)
     with open(out_csv, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
+
+        # En-tête
         w.writerow([
             "instance", "family", "params", "seed", "method",
             "colors_used", "valid", "time_s", "status", "k_found"
         ])
+        # Lignes de résultats
         for r in rows:
             w.writerow([
                 r.instance, r.family, r.params, r.seed, r.method,
