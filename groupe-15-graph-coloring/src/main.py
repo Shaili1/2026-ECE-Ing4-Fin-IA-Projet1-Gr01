@@ -11,7 +11,7 @@ from heuristics import greedy_coloring, dsatur_coloring
 from solve_coloring import solve_k_coloring, solve_min_coloring
 from viz import draw_plain, draw_coloring
 
-# benchmark est optionnel: si absent, on n'explose pas
+
 try:
     from benchmark import run_benchmark
 except Exception:
@@ -19,8 +19,12 @@ except Exception:
 
 Node = Hashable
 
-# ------------------- IO helpers -------------------
+
+# ==========================================================
+# Fonctions utilitaires pour la gestion des fichiers
+# ==========================================================
 def ensure_parent(path: Optional[str]) -> Optional[Path]:
+    # Crée le dossier parent du fichier si nécessaire
     if not path:
         return None
     p = Path(path)
@@ -29,6 +33,7 @@ def ensure_parent(path: Optional[str]) -> Optional[Path]:
     return p
 
 def save_json(path: str, payload: dict) -> None:
+    # Sauvegarde un dictionnaire au format JSON
     p = ensure_parent(path)
     if p is None:
         return
@@ -36,13 +41,17 @@ def save_json(path: str, payload: dict) -> None:
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
 def make_before_path(save_fig: Optional[str]) -> Optional[str]:
+    # Génère le chemin de l’image "before"
     if not save_fig:
         return None
     root, ext = os.path.splitext(save_fig)
     return f"{root}_before{ext or '.png'}"
 
-# ------------------- Metrics -------------------
+# ==========================================================
+# Fonctions de mesure et de validation
+# ==========================================================
 def is_valid_coloring(G: nx.Graph, coloring: Optional[Dict[Node, int]]) -> bool:
+    # Vérifie que la coloration est complète et valide
     if coloring is None:
         return False
     if len(coloring) != G.number_of_nodes():
@@ -50,19 +59,26 @@ def is_valid_coloring(G: nx.Graph, coloring: Optional[Dict[Node, int]]) -> bool:
     return all(coloring[u] != coloring[v] for u, v in G.edges())
 
 def colors_used(coloring: Dict[Node, int]) -> int:
+    # Compte le nombre de couleurs distinctes utilisées
     return len(set(coloring.values())) if coloring else 0
 
-# ------------------- Bounds (optimization) -------------------
+# ==========================================================
+# Bornes pour l’optimisation (cp_min)
+# ==========================================================
 def lower_bound_clique(G: nx.Graph) -> int:
+    # Borne inférieure basée sur la taille de la plus grande clique
     try:
         return max(1, int(nx.graph_clique_number(G)))
     except Exception:
         return 1
 
 def upper_bound_dsatur(G: nx.Graph) -> int:
+    # Borne supérieure obtenue via une heuristique DSATUR
     return max(1, colors_used(dsatur_coloring(G)))
 
-# ------------------- Interactive helpers -------------------
+# ==========================================================
+# Fonctions d’interaction utilisateur
+# ==========================================================
 def ask_str(prompt: str, default: str) -> str:
     s = input(f"{prompt} [{default}] : ").strip()
     return s if s else default
@@ -83,9 +99,13 @@ def ask_bool(prompt: str, default: bool) -> bool:
     return s in ("o", "oui", "y", "yes")
 
 def ask_optional_path(prompt: str) -> Optional[str]:
+    # Permet à l’utilisateur de ne rien entrer
     s = input(f"{prompt} (Entrée = rien) : ").strip()
     return s or None
 
+# ==========================================================
+# Configuration interactive (mode par défaut)
+# ==========================================================
 def interactive_config() -> dict:
     print("\n=== Coloration de graphe / carte (mode interactif) ===")
     print("Instances possibles : triangle, cycle, grid, erdos, map_like")
@@ -121,6 +141,9 @@ def interactive_config() -> dict:
         "show": show, "save_fig": save_fig, "save_json": save_js
     }
 
+# ==========================================================
+# Gestion des arguments en ligne de commande
+# ==========================================================
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Graph/Map Coloring (interactive by default).")
     p.add_argument("--no-interactive", action="store_true")
@@ -140,7 +163,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--save-json", type=str, default=None)
     return p
 
-# ------------------- Runners -------------------
 def draw_before_after(G, pos, inst_name, title_after, coloring, show, save_fig):
     if not (show or save_fig):
         return
@@ -174,11 +196,14 @@ def print_result(G: nx.Graph, inst_name: str, method: str, used: int, valid: boo
     else:
         print(f"colors_used={used} | valid={valid}")
 
-
+# ==========================================================
+# Fonctions principales d’exécution
+# ==========================================================
 def run_method(G, pos, inst_name, method, timeout, k, show, save_fig, save_json_path):
+    # Exécute une méthode de coloration donnée
     coloring = None
     info: dict = {}
-
+    # Préparation des données pour les méthodes CP
     if method in ("cp_k", "cp_min"):
         nodes, edges = list(G.nodes()), list(G.edges())
 
@@ -216,9 +241,11 @@ def run_method(G, pos, inst_name, method, timeout, k, show, save_fig, save_json_
 
     print_result(G, inst_name, method, used, valid, info, k)
 
+    # Affichage et visualisation
     title_after = f"{inst_name} | {method} | colors={used} | valid={valid}"
     draw_before_after(G, pos, inst_name, title_after, coloring, show, save_fig)
 
+    # Sauvegarde des résultats
     if save_json_path:
         payload = {
             "instance": inst_name,
@@ -257,12 +284,15 @@ def run_bench(timeout: float):
     print("\n=== BENCHMARK ===")
     print(f"Le CSV sera écrit ici : {out_csv}")
     rows = run_benchmark(out_csv=out_csv, timeout_cp_min=timeout)
-    print(f"Benchmark terminé ✅ ({len(rows)} lignes) -> {out_csv}")
+    print(f"Benchmark terminé ({len(rows)} lignes) -> {out_csv}")
 
-
+# ==========================================================
+# Fonction principale
+# ==========================================================
 def main() -> None:
     args = build_parser().parse_args()
 
+    # Mode interactif par défaut
     if not args.no_interactive and args.method is None and args.instance is None:
         cfg = interactive_config()
         method = cfg["method"]
